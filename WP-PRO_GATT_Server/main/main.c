@@ -8,7 +8,6 @@
 #include "gap.h"
 #include "gatt_svc.h"
 #include "heart_rate.h"
-#include "led.h"
 #include "driver/gpio.h"
 #include "reg.h"
 #include "reg_esp32c6_gpio.h"
@@ -111,9 +110,6 @@ void app_main(void) {
     /* Local variables */
     int rc;
     esp_err_t ret;
-
-    /* LED initialization */
-    led_init();
 
     /*
      * NVS flash initialization
