@@ -32,6 +32,6 @@
 
 /* Defines */
 #define TAG "NimBLE_GATT_Server"
-#define DEVICE_NAME "WP-PRO_GATT"
+#define DEVICE_NAME "WP-PRO_1.0.7"
 
 #endif // COMMON_H
