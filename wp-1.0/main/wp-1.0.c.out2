@@ -1,0 +1,201 @@
+#include <stdio.h>
+#include <string.h>
+#include <inttypes.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "driver/gpio.h"
+//#include "esp_log.h"
+//#include "esp_bt.h"
+//#include "esp_gap_ble_api.h"
+//#include "esp_gatts_api.h"
+//#include "esp_bt_main.h"
+//#include "esp_gatt_common_api.h"
+//#include "nvs_flash.h"
+
+#include "esp_system.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_bt.h"
+
+#include "esp_gap_ble_api.h"
+#include "esp_gatts_api.h"
+#include "esp_bt_defs.h"
+#include "esp_bt_main.h"
+#include "esp_gatt_common_api.h"
+
+#include "sdkconfig.h"
+
+#define BUTTON_GPIO GPIO_NUM_22
+#define LED_GPIO GPIO_NUM_4
+
+#define GATTS_SERVICE_UUID_TEST 0x00FF
+#define GATTS_CHAR_UUID_TEST    0xFF01
+#define GATTS_NUM_HANDLE_TEST   4
+
+#define MESSAGE "Button Pressed"
+#define DEVICE_NAME "ESP32_BLE_Button"
+
+static uint8_t adv_config_done = 0;
+static esp_gatt_if_t gatts_if;
+static uint16_t conn_id;
+static uint16_t handle_table[GATTS_NUM_HANDLE_TEST];
+
+#ifdef CONFIG_SET_RAW_ADV_DATA
+static uint8_t raw_adv_data[] = {
+        0x02, 0x01, 0x06,                  // Length 2, Data Type 1 (Flags), Data 1 (LE General Discoverable Mode, BR/EDR Not Supported)
+        0x02, 0x0a, 0xeb,                  // Length 2, Data Type 10 (TX power leve), Data 2 (-21)
+        0x03, 0x03, 0xab, 0xcd,            // Length 3, Data Type 3 (Complete 16-bit Service UUIDs), Data 3 (UUID)
+};
+static uint8_t raw_scan_rsp_data[] = {     // Length 15, Data Type 9 (Complete Local Name), Data 1 (ESP_GATTS_DEMO)
+        0x0f, 0x09, 0x45, 0x53, 0x50, 0x5f, 0x47, 0x41, 0x54, 0x54, 0x53, 0x5f, 0x44,
+        0x45, 0x4d, 0x4f
+};
+#else
+
+static uint8_t adv_service_uuid128[32] = {
+    /* LSB <--------------------------------------------------------------------------------> MSB */
+    //first uuid, 16bit, [12],[13] is the value
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xEE, 0x00, 0x00, 0x00,
+    //second uuid, 32bit, [12], [13], [14], [15] is the value
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
+};
+#endif
+
+// The length of adv data must be less than 31 bytes
+//static uint8_t test_manufacturer[TEST_MANUFACTURER_DATA_LEN] =  {0x12, 0x23, 0x45, 0x56};
+//adv data
+static esp_ble_adv_data_t adv_data = {
+    .set_scan_rsp = false,
+    .include_name = true,
+    .include_txpower = false,
+    .min_interval = 0x0006, //slave connection min interval, Time = min_interval * 1.25 msec
+    .max_interval = 0x0010, //slave connection max interval, Time = max_interval * 1.25 msec
+    .appearance = 0x00,
+    .manufacturer_len = 0, //TEST_MANUFACTURER_DATA_LEN,
+    .p_manufacturer_data =  NULL, //&test_manufacturer[0],
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = sizeof(adv_service_uuid128),
+    .p_service_uuid = adv_service_uuid128,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+// scan response data
+static esp_ble_adv_data_t scan_rsp_data = {
+    .set_scan_rsp = true,
+    .include_name = true,
+    .include_txpower = true,
+    //.min_interval = 0x0006,
+    //.max_interval = 0x0010,
+    .appearance = 0x00,
+    .manufacturer_len = 0, //TEST_MANUFACTURER_DATA_LEN,
+    .p_manufacturer_data =  NULL, //&test_manufacturer[0],
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = sizeof(adv_service_uuid128),
+    .p_service_uuid = adv_service_uuid128,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+
+
+static esp_ble_adv_params_t adv_params = {
+    .adv_int_min       = 0x20,
+    .adv_int_max       = 0x40,
+    .adv_type          = ADV_TYPE_IND,
+    .own_addr_type     = BLE_ADDR_TYPE_PUBLIC,
+    .peer_addr         = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    .peer_addr_type    = BLE_ADDR_TYPE_PUBLIC,
+    .channel_map       = ADV_CHNL_ALL,
+    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+};
+
+//static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
+//                                        esp_ble_gatts_cb_param_t *param);
+
+static void button_task(void *arg) {
+    bool button_pressed = false;
+    while (1) {
+        if (gpio_get_level(BUTTON_GPIO) == 0) {
+            if (!button_pressed) {
+                button_pressed = true;
+                // Blink LED
+                gpio_set_level(LED_GPIO, 1);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                gpio_set_level(LED_GPIO, 0);
+
+                // Send notification to BLE client
+                esp_ble_gatts_send_indicate(gatts_if, conn_id, handle_table[2],
+                                            strlen(MESSAGE), (uint8_t *)MESSAGE, false);
+            }
+        } else {
+            button_pressed = false;
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);  // Debouncing delay
+    }
+}
+
+static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
+    switch (event) {
+        case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
+            if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
+                ESP_LOGE("BLE", "Advertising start failed");
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
+                                esp_ble_gatts_cb_param_t *param) {
+    switch (event) {
+        case ESP_GATTS_REG_EVT:
+            esp_ble_gap_set_device_name(DEVICE_NAME);
+            esp_ble_gap_config_adv_data(&adv_data);
+            break;
+        case ESP_GATTS_CONNECT_EVT:
+            conn_id = param->connect.conn_id;
+            break;
+        case ESP_GATTS_DISCONNECT_EVT:
+            esp_ble_gap_start_advertising(&adv_params);
+            break;
+        default:
+            break;
+    }
+}
+
+void app_main(void) {
+    esp_err_t ret = nvs_flash_init();
+    ret |= esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    esp_bt_controller_init(&bt_cfg);
+    esp_bt_controller_enable(ESP_BT_MODE_BLE);
+#if 1
+    esp_bluedroid_config_t bluedroid_cfg = BT_BLUEDROID_INIT_CONFIG_DEFAULT();
+    esp_bluedroid_init_with_cfg(&bluedroid_cfg);
+#else
+    esp_bluedroid_init();
+#endif
+    esp_bluedroid_enable();
+
+    // Register the BLE callback functions
+    esp_ble_gatts_register_callback(gatts_event_handler);
+    esp_ble_gap_register_callback(gap_event_handler);
+
+    // Configure button GPIO
+    gpio_config_t io_conf = {
+        .intr_type = GPIO_INTR_DISABLE,
+        .mode = GPIO_MODE_INPUT,
+        .pin_bit_mask = 1ULL << BUTTON_GPIO,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+    };
+    gpio_config(&io_conf);
+
+    // Configure LED GPIO
+    gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
+
+    // Start button task
+    xTaskCreate(button_task, "button_task", 2048, NULL, 10, NULL);
+}
+

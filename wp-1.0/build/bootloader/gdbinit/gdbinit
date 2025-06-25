@@ -1,0 +1,2 @@
+source /home/weber/esp/repos/esp32-c6/wp-1.0/build/bootloader/gdbinit/symbols
+source /home/weber/esp/repos/esp32-c6/wp-1.0/build/bootloader/gdbinit/connect
