@@ -40,7 +40,7 @@
 #define PROFILE_NUM      1
 #define PROFILE_APP_IDX  0
 #define ESP_APP_ID       0x55
-#define DEVICE_NAME      "WP-PRO-1.0.7"
+#define DEVICE_NAME      "WP-PRO"
 #define SVC_INST_ID      0
 
 #define BUTTON_GPIO      22
@@ -60,80 +60,98 @@ static uint16_t conn_id_global;
 static bool is_connected_global = false;
 
 static uint8_t adv_config_done       = 0;
+uint16_t heart_rate_handle_table[HRS_IDX_NB]; 
 
-uint16_t heart_rate_handle_table[HRS_IDX_NB];
-
-typedef struct {
-    uint8_t                 *prepare_buf;
-    int                     prepare_len;
-} prepare_type_env_t;
+typedef struct
+{
+  uint8_t *prepare_buf;
+  int     prepare_len;
+} prepare_type_env_t; 
 
 static prepare_type_env_t prepare_write_env;
 
 #define CONFIG_SET_RAW_ADV_DATA
-#ifdef CONFIG_SET_RAW_ADV_DATA
-static uint8_t raw_adv_data[] = {
-    /* Flags */
-    0x02, ESP_BLE_AD_TYPE_FLAG, 0x06,
-    /* TX Power Level */
-    0x02, ESP_BLE_AD_TYPE_TX_PWR, 0xEB,
-    /* Complete 16-bit Service UUIDs */
-    0x03, ESP_BLE_AD_TYPE_16SRV_CMPL, 0xFF, 0x00,
-    /* Complete Local Name */
-    0x0F, ESP_BLE_AD_TYPE_NAME_CMPL,
-    'W', 'P', '-', 'P', 'R', 'O', '-', '1', '.', '0', '.', '7'
-//    'E', 'S', 'P', '_', 'G', 'A', 'T', 'T', 'S', '_', 'D', 'E', 'M', 'O'
+
+#ifdef CONFIG_SET_RAW_ADV_DATA 
+
+static uint8_t raw_adv_data[] = 
+{
+  /* Flags */
+  0x02,
+  ESP_BLE_AD_TYPE_FLAG,
+  0x06, 
+  /* TX Power Level */
+  0x02,
+  ESP_BLE_AD_TYPE_TX_PWR,
+  0xEB,
+  /* Complete 16-bit Service UUIDs */
+  0x03,
+  ESP_BLE_AD_TYPE_16SRV_CMPL,
+  0xFF,
+  0x00,
+  /* Complete Local Name */
+  0x0F,
+  ESP_BLE_AD_TYPE_NAME_CMPL,
+  'W', 'P', '-', 'P', 'R', 'O', '-', '1', '.', '0', '.', '7'
 };
 
-static uint8_t raw_scan_rsp_data[] = {
-    /* Flags */
-    0x02, ESP_BLE_AD_TYPE_FLAG, 0x06,
-    /* TX Power Level */
-    0x02, ESP_BLE_AD_TYPE_TX_PWR, 0xEB,
-    /* Complete 16-bit Service UUIDs */
-    0x03, ESP_BLE_AD_TYPE_16SRV_CMPL, 0xFF, 0x00
+static uint8_t raw_scan_rsp_data[] =
+{ 
+  /* Flags */
+  0x02,
+  ESP_BLE_AD_TYPE_FLAG,
+  0x06,
+  /* TX Power Level */
+  0x02,
+  ESP_BLE_AD_TYPE_TX_PWR,
+  0xEB,
+  /* Complete 16-bit Service UUIDs */
+  0x03,
+  ESP_BLE_AD_TYPE_16SRV_CMPL,
+  0xFF,
+  0x00
 };
-
-#else
-//static uint8_t service_uuid[16] = {
-//    /* LSB <--------------------------------------------------------------------------------> MSB */
-//    //first uuid, 16bit, [12],[13] is the value
-//    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
-//};
-//
+#else 
+#if 0
+#error "NOT RAW ADV DATA"
+static uint8_t service_uuid[16] = {
+/* LSB <--------------------------------------------------------------------------------> MSB */
+//first uuid, 16bit, [12],[13] is the value
+//    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, //};
 ///* The length of adv data must be less than 31 bytes */
-//static esp_ble_adv_data_t adv_data = {
+static esp_ble_adv_data_t adv_data = {
 //    .set_scan_rsp        = false,
-//    .include_name        = true,
-//    .include_txpower     = true,
-//    .min_interval        = 0x0006, //slave connection min interval, Time = min_interval * 1.25 msec
-//    .max_interval        = 0x0010, //slave connection max interval, Time = max_interval * 1.25 msec
-//    .appearance          = 0x00,
-//    .manufacturer_len    = 0,    //TEST_MANUFACTURER_DATA_LEN,
-//    .p_manufacturer_data = NULL, //test_manufacturer,
-//    .service_data_len    = 0,
-//    .p_service_data      = NULL,
-//    .service_uuid_len    = sizeof(service_uuid),
-//    .p_service_uuid      = service_uuid,
-//    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-//};
-//
-//// scan response data
-//static esp_ble_adv_data_t scan_rsp_data = {
-//    .set_scan_rsp        = true,
-//    .include_name        = true,
-//    .include_txpower     = true,
-//    .min_interval        = 0x0006,
-//    .max_interval        = 0x0010,
-//    .appearance          = 0x00,
-//    .manufacturer_len    = 0, //TEST_MANUFACTURER_DATA_LEN,
-//    .p_manufacturer_data = NULL, //&test_manufacturer[0],
-//    .service_data_len    = 0,
-//    .p_service_data      = NULL,
-//    .service_uuid_len    = sizeof(service_uuid),
-//    .p_service_uuid      = service_uuid,
-//    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-//};
+    .include_name        = true,
+    .include_txpower     = true,
+    .min_interval        = 0x0006, //slave connection min interval, Time = min_interval * 1.25 msec
+    .max_interval        = 0x0010, //slave connection max interval, Time = max_interval * 1.25 msec
+    .appearance          = 0x00,
+    .manufacturer_len    = 0,    //TEST_MANUFACTURER_DATA_LEN,
+    .p_manufacturer_data = NULL, //test_manufacturer,
+    .service_data_len    = 0,
+    .p_service_data      = NULL,
+    .service_uuid_len    = sizeof(service_uuid),
+    .p_service_uuid      = service_uuid,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+
+// scan response data
+static esp_ble_adv_data_t scan_rsp_data = {
+    .set_scan_rsp        = true,
+    .include_name        = true,
+    .include_txpower     = true,
+    .min_interval        = 0x0006,
+    .max_interval        = 0x0010,
+    .appearance          = 0x00,
+    .manufacturer_len    = 0, //TEST_MANUFACTURER_DATA_LEN,
+    .p_manufacturer_data = NULL, //&test_manufacturer[0],
+    .service_data_len    = 0,
+    .p_service_data      = NULL,
+    .service_uuid_len    = sizeof(service_uuid),
+    .p_service_uuid      = service_uuid,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+#endif
 #endif /* CONFIG_SET_RAW_ADV_DATA */
 
 static esp_ble_adv_params_t adv_params = {
@@ -380,6 +398,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             }
             adv_config_done |= SCAN_RSP_CONFIG_FLAG;
     #else
+    #error "NOT RAW_ADV_DATA"
             //config adv data
             esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
             if (ret){

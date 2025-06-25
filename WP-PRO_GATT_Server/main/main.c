@@ -141,8 +141,12 @@ static void button_task(void *param)
       // wait for button release
       while (REG_R(GPIO_IN, D22) == 0)
       { 
+        send_heart_rate_indication();
+        send_button_indication(1u);
+//        esp_ble_gatts_send_indicate(gatts_if, conn_id, gatt_handle_table[2], sizeof(value), value, true);
         vTaskDelay(50/portTICK_PERIOD_MS);
       }
+      send_button_indication(0u);
       REG_S1(GPIO_OUT_CLR, D5);
       ESP_LOGI(TAG, "button released\n");
     }
