@@ -15,11 +15,11 @@ static int button_access(uint16_t conn_handle, uint16_t attr_handle,
                          struct ble_gatt_access_ctxt *ctxt, void *arg);
 /* Private variables */
 /* Heart rate service */
-static const ble_uuid16_t heart_rate_svc_uuid = BLE_UUID16_INIT(0x180D);
+static const ble_uuid16_t heart_rate_svc_uuid = BLE_UUID16_INIT(0x180F);
 
 static uint8_t heart_rate_chr_val[2] = {0};
 static uint16_t heart_rate_chr_val_handle;
-static const ble_uuid16_t heart_rate_chr_uuid = BLE_UUID16_INIT(0x2A97);
+static const ble_uuid16_t heart_rate_chr_uuid = BLE_UUID16_INIT(0x2A19);
 
 static uint16_t heart_rate_chr_conn_handle = 0;
 static bool heart_rate_chr_conn_handle_inited = false;
@@ -139,7 +139,7 @@ static int button_access(uint16_t conn_handle, uint16_t attr_handle,
         /* Verify attribute handle */
         if (attr_handle == button_chr_val_handle) {
             /* Update access buffer value */
-            button_val[1] = get_heart_rate();
+//            button_val[1] = get_heart_rate();
             rc = os_mbuf_append(ctxt->om, &button_val,
                                 sizeof(button_val));
             return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
@@ -169,8 +169,9 @@ void send_heart_rate_indication(void) {
 }
 
 void send_button_indication(uint8_t pressed) {
+	button_val[1] = pressed;
     if (button_ind_status && button_chr_conn_handle_inited) {
-        esp_ble_gatts_indicate(button_chr_conn_handle,
+        ble_gatts_indicate(button_chr_conn_handle,
                            button_chr_val_handle); //, pressed, 1);
         ESP_LOGI(TAG, "button indication sent!");
     }
@@ -240,6 +241,13 @@ void gatt_svr_subscribe_cb(struct ble_gap_event *event) {
         heart_rate_chr_conn_handle = event->subscribe.conn_handle;
         heart_rate_chr_conn_handle_inited = true;
         heart_rate_ind_status = event->subscribe.cur_indicate;
+    }
+    /* Check attribute handle */
+    if (event->subscribe.attr_handle == button_chr_val_handle) {
+        /* Update heart rate subscription status */
+        button_chr_conn_handle = event->subscribe.conn_handle;
+        button_chr_conn_handle_inited = true;
+        button_ind_status = event->subscribe.cur_indicate;
     }
 }
 
