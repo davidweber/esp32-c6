@@ -31,7 +31,7 @@
 #include "nimble/nimble_port_freertos.h"
 
 /* Defines */
-#define TAG "NimBLE_GATT_Server"
-#define DEVICE_NAME "WP-PRO_1.0.7"
+#define TAG "WP-PRO-2.0"
+#define DEVICE_NAME "WP-PRO-2.0"
 
 #endif // COMMON_H
