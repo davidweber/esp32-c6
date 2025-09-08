@@ -133,22 +133,23 @@ static void button_task(void *param)
 
   while (1)
   {
-    vTaskDelay(200 / portTICK_PERIOD_MS);  // Delay for 200 ms
+    vTaskDelay(50 / portTICK_PERIOD_MS);  // Delay for 200 ms
     if (REG_R(GPIO_IN, D22) == 0)
     {
       ESP_LOGI(TAG, "button pressed\n");
+      send_button_indication(1u);
       REG_S1(GPIO_OUT_SET, D5);
       // wait for button release
       while (REG_R(GPIO_IN, D22) == 0)
       { 
-        send_heart_rate_indication();
-        send_button_indication(1u);
+//        send_heart_rate_indication();
+//        send_button_indication(1u);
 //        esp_ble_gatts_send_indicate(gatts_if, conn_id, gatt_handle_table[2], sizeof(value), value, true);
-        vTaskDelay(50/portTICK_PERIOD_MS);
+        vTaskDelay(5/portTICK_PERIOD_MS);
       }
-      send_button_indication(0u);
-      REG_S1(GPIO_OUT_CLR, D5);
       ESP_LOGI(TAG, "button released\n");
+      REG_S1(GPIO_OUT_CLR, D5);
+      send_button_indication(0u);
     }
   }
   vTaskDelete(NULL);
