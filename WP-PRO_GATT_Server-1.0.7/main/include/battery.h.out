@@ -1,0 +1,25 @@
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * Initialize the ADC for battery measurement
+ */
+void battery_init(void);
+
+/**
+ * Read battery voltage in millivolts
+ */
+int battery_read_mv(void);
+
+/**
+ * Start FreeRTOS task that logs battery voltage periodically
+ */
+void battery_start_task(void);
+
+#ifdef __cplusplus
+}
+#endif
+
